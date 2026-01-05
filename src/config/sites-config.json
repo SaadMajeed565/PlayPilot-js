@@ -1,0 +1,75 @@
+{
+  "_comment": "Site-specific configuration for web automation. Add domain patterns (partial matches) and their settings here.",
+  "sites": {
+    "web.whatsapp.com": {
+      "highActivity": true,
+      "navigationTimeout": 60000,
+      "waitUntil": "load",
+      "postLoadWait": 5000,
+      "customWaitSelectors": [
+        "[data-testid=\"chatlist\"]",
+        "[data-testid=\"conversation-panel\"]",
+        "[aria-label*=\"Chat\"]",
+        "[role=\"main\"]"
+      ],
+      "customWaitTimeout": 45000,
+      "customWaitFallbackSelectors": [
+        "#app",
+        "[data-testid]",
+        "[role=\"application\"]"
+      ],
+      "customWaitFallbackTimeout": 30000,
+      "additionalWaitAfterLoad": 3000,
+      "fallbackWait": 5000
+    },
+"facebook.com": {
+  "highActivity": true,
+  "navigationTimeout": 90000,
+  "waitUntil": "load",
+  "postLoadWait": 8000,
+  "requestThrottleDelay": 2000,
+  "customWaitSelectors": [
+    "[role='main']",
+    "[role='navigation']",
+    "[data-pagelet]",
+    "#facebook",
+    "[aria-label*='Facebook']",
+    "#checkpoint_title",
+    "[data-testid='checkpoint']",
+    "form[action*='checkpoint']"
+  ]
+},
+    "walmart.com": {
+      "highActivity": true,
+      "navigationTimeout": 60000,
+      "waitUntil": "load",
+      "postLoadWait": 2000
+    },
+    "instagram.com": {
+      "highActivity": true,
+      "navigationTimeout": 60000,
+      "waitUntil": "load",
+      "postLoadWait": 2000
+    },
+    "twitter.com": {
+      "highActivity": true,
+      "navigationTimeout": 60000,
+      "waitUntil": "load",
+      "postLoadWait": 2000
+    },
+    "x.com": {
+      "highActivity": true,
+      "navigationTimeout": 60000,
+      "waitUntil": "load",
+      "postLoadWait": 2000
+    }
+  },
+  "defaults": {
+    "normalSiteTimeout": 30000,
+    "normalSiteWaitUntil": "networkidle",
+    "highActivityTimeout": 60000,
+    "highActivityWaitUntil": "load",
+    "postLoadWait": 2000,
+    "fallbackTimeout": 30000
+  }
+}

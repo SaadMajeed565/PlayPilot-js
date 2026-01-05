@@ -1,0 +1,45 @@
+{
+  "title": "Form Submission Example",
+  "url": "https://example.com/contact",
+  "steps": [
+    {
+      "type": "navigate",
+      "url": "https://example.com/contact",
+      "timestamp": 1000
+    },
+    {
+      "type": "input",
+      "selector": "input[name='name']",
+      "value": "John Doe",
+      "timestamp": 2000
+    },
+    {
+      "type": "input",
+      "selector": "input[name='email']",
+      "value": "john@example.com",
+      "timestamp": 3000
+    },
+    {
+      "type": "input",
+      "selector": "textarea[name='message']",
+      "value": "This is a test message",
+      "timestamp": 4000
+    },
+    {
+      "type": "click",
+      "selector": "button[type='submit']",
+      "text": "Submit",
+      "timestamp": 5000
+    },
+    {
+      "type": "waitForSelector",
+      "selector": ".success-message",
+      "timestamp": 6000
+    }
+  ],
+  "metadata": {
+    "source": "chrome-recorder",
+    "version": "1.0"
+  }
+}
+

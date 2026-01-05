@@ -1,0 +1,330 @@
+# AI-driven Web Automation — Cursor AI Integration Spec
+
+**Purpose:**
+Provide Cursor AI with a complete, production-grade specification to build an AI-controlled web automation model that uses Chrome Recorder JSON as skeleton input. This document describes architecture, data formats, pipelines, components, training/feedback loops, evaluation metrics, safety and legal considerations, deployment recommendations, and a suggested technology stack.
+
+---
+
+## 1. Goals & Success Criteria
+
+**Primary goal:** Convert Chrome Recorder JSON recordings into robust, generalizable automation skills executed safely through a browser automation engine (Playwright). The AI model interprets intent, heals selectors, injects logic, and outputs structured commands that an executor runs deterministically.
+
+**Success criteria:**
+
+* Recorded human flow converted reliably into Playwright-style command sequence >= 85% of the time on the same site.
+* Selector healing resolves broken selectors in >= 80% of common UI drift cases.
+* Cross-site mapping: single intent can be executed across at least 3 distinct sites for the same task with minimal manual tuning.
+* System logs and telemetry expose failures with actionable diagnostics.
+
+---
+
+## 2. High-level Architecture
+
+```
+[Recorder JSON] → [Preprocessor] → [Intent Extractor] → [Skill Generator (LLM)] → [Selector Healer + Logic Engine] → [Playwright Command Generator] → [Executor] → [Telemetry + Memory]
+```
+
+**Components:**
+
+* **Recorder JSON**: Raw recording exported from Chrome Recorder (DevTools). Contains steps, selectors, inputs, timing.
+* **Preprocessor**: Normalizes JSON, canonicalizes selectors, extracts meta (URL, frame, user inputs).
+* **Intent Extractor**: Converts low-level steps into higher-level intents (e.g., `submit-login`, `post-message`).
+* **Skill Generator (LLM)**: Produces structured, platform-agnostic action plans and fallback strategies.
+* **Selector Healer**: Attempts multiple selector strategies and resolves brittle selectors using heuristics and CV/text matching.
+* **Logic Engine**: Injects control flow (retries, conditionals, loops, error handlers) into action plans.
+* **Playwright Command Generator**: Translates healed actions into Playwright-compatible JSON/JS that the Executor can run.
+* **Executor**: Isolated runtime (container/bare-metal) that runs Playwright commands and returns structured results.
+* **Telemetry & Memory**: Stores success/failure, selector history, site layouts, and detection events.
+
+---
+
+## 3. Data Format & Schema
+
+### 3.1 Input (Chrome Recorder JSON simplified)
+
+Essential fields to extract from each step:
+
+* `type` (click, input, navigate, waitForSelector, assert, scroll)
+* `selector` (string)
+* `text` (for input or assert)
+* `url` (if navigation)
+* `frame` (optional)
+* `timestamp`
+
+### 3.2 Internal Canonical Action (example)
+
+```json
+{
+  "intent": "submit-login",
+  "steps": [
+    {"action": "fill", "target": {"selector": "input[name=\"email\"]", "strategy": "css"}, "value": "{{user.email}}"},
+    {"action": "fill", "target": {"selector": "input[name=\"password\"]"}, "value": "{{user.password}}"},
+    {"action": "click", "target": {"strategy": "text|role|css", "value": "Sign in"}},
+    {"action": "waitFor", "target": {"selector": "#dashboard"}, "timeout": 10000}
+  ],
+  "metadata": {"source": "recorder-v1", "site": "example.com"}
+}
+```
+
+### 3.3 Executor Command Format (Playwright JSON)
+
+```json
+{
+  "type": "playwright",
+  "commands": [
+    {"cmd": "goto", "args": ["https://example.com/login"]},
+    {"cmd": "fill", "args": ["input[name=\"email\"]", "user@example.com"]},
+    {"cmd": "click", "args": ["text=Sign in"]}
+  ]
+}
+```
+
+---
+
+## 4. Intent Extraction & Skill Generation
+
+1. **Chunk recorder steps** into meaningful groups (login flow, form fill, navigation, assertion).
+2. Use pattern matching + LLM classification to assign intent labels (`login`, `post`, `search`, `scrape-list`).
+3. For each intent produce a **skill spec**: canonical steps, preconditions, postconditions, failure modes, required credentials, rate limits, and data outputs.
+4. Skills should be modular and reusable across sites.
+
+**Example skill fields:** `name`, `description`, `inputs`, `outputs`, `steps`, `retryPolicy`, `safetyChecks`, `rateLimit`.
+
+---
+
+## 5. Selector Healing Strategy
+
+**Goals:** avoid brittle selectors (auto-generated class names, dynamic ids).
+
+**Multi-tier approach:**
+
+1. **Prefer stable attributes:** `name`, `placeholder`, `aria-label`, `role`, visible text.
+2. **Text-based matching:** find button/link by normalized visible text.
+3. **Structure-based:** relative selectors from nearby stable elements.
+4. **Fallback heuristics:** attribute intersection scoring (tag, type, nearest label). Use scoring to pick best candidate.
+5. **Optional visual matching:** hashed DOM screenshot regions + OCR to match visible text for extreme cases.
+6. **Retry strategy:** if candidate fails, try the next best candidate up to `N` times, then escalate.
+
+**Selector scoring factors:** (weight examples)
+
+* text match (0.35)
+* attribute match (0.25)
+* DOM depth proximity (0.15)
+* role/semantic match (0.15)
+* prior success history (0.10)
+
+---
+
+## 6. Logic Engine (Control Flow & Error Handling)
+
+**Capabilities to inject:**
+
+* Conditionals: `if elementExists(selector)`
+* Loops: `for each item in list` (when scraping)
+* Retries: exponential backoff for flaky actions
+* Parallelism: limited concurrency for safe tasks
+* Fallbacks: alternate selectors/paths
+* Human-like delays: randomized wait times to mimic natural behavior
+
+**Safe defaults:**
+
+* Maximum retries per action: 3
+* Default timeout per wait: 10s (configurable)
+* Rate limiting: per-host and global
+
+---
+
+## 7. Model Outputs & Executor Contract
+
+**What model must output:** a deterministic action plan serialized as JSON (Playwright-like) including:
+
+* ordered commands
+* selectors with chosen strategy
+* timeouts
+* retry policy per command
+* human-delay hints
+
+**Executor responsibilities:**
+
+* Run commands deterministically and return structured results
+* Sanitize and enforce rate-limits
+* Capture logs, network traces, screenshots on failure
+* Emit events (success, fail, retry, captcha, blocked)
+
+---
+
+## 8. Training Data & Fine-tuning
+
+**Data to gather:**
+
+* 1,000+ recorder JSON samples across diverse sites and flows (login, forms, posting, search, paginated scraping)
+* Negative samples (broken selectors, modal popups, captchas)
+* Failure logs with corrected selectors and human fixes
+* Site snapshots (HTML) paired with recorder steps for selector healing training
+
+**Fine-tuning approach:**
+
+* Supervised examples mapping recorder JSON → canonical action plan
+* Reinforcement-style feedback where executor success increments skill score
+* Curriculum: start with admin dashboards and simple forms, progress to social platforms
+
+---
+
+## 9. Evaluation Metrics
+
+* **Conversion accuracy:** % of recorder flows converted into valid plans
+* **Execution success rate:** % of plans that run end-to-end without manual intervention
+* **Selector recovery rate:** % of broken selectors resolved automatically
+* **False positive actions:** actions executed that should not (e.g., extra clicks) — minimize
+* **Latency:** time taken from JSON input → ready plan
+
+Set automated CI tests against representative demo sites for continuous measurement.
+
+---
+
+## 10. Safety, Ethics & Legal
+
+* Log user consent and record provenance for all sessions
+* Respect robots.txt and site terms; provide opt-out and rate-limiting
+* Prohibit actions that send spam or harvest protected data (credit cards, SSNs)
+* Introduce an Acceptable Use Policy and abuse monitoring
+* Provide a manual override / human-in-the-loop for sensitive flows
+
+---
+
+## 11. Telemetry & Memory
+
+**Telemetry:** request/response traces, screenshots on failure, DOM snapshots, CPU/memory usage, rate-limit events.
+
+**Memory store:**
+
+* Resolved selectors history (per site)
+* Successful skill templates
+* Failed attempts and reasons
+
+A fast key-value store (Redis) plus a durable DB (Postgres) is recommended.
+
+---
+
+## 12. Deployment & Scaling
+
+**Executor isolation:** use per-job containers to limit fingerprint bleed and allow safe resets.
+**Scaling:** queue-based workers (BullMQ / Celery) with autoscaling groups.
+**Security:** rotate execution credentials, use ephemeral browser profiles, proxy pools, and per-tenant rate limits.
+
+---
+
+## 13. Developer APIs
+
+Expose REST/gRPC endpoints for:
+
+* Submit recorder JSON → returns job id
+* Get job status / logs
+* Fetch artifacts (screenshots, HAR, DOM snapshot)
+* Replay plan in debug mode
+
+Authentication: OAuth2 + API keys with scopes.
+
+---
+
+## 14. Suggested Roadmap (MVP → v1 → Scale)
+
+**MVP (4–6 weeks):**
+
+* Preprocessor, intent extractor, and map to canonical actions
+* Playwright executor with basic selector healer
+* Local LLM prompts (or API) generating action plans
+* Minimal telemetry and job queue
+
+**v1 (following 6–12 weeks):**
+
+* Improve selector healer with structure matching
+* Add logic engine (conditionals, retries)
+* Memory store for selector reuse
+* User-facing debug UI for manual fixes
+
+**Scale (3–6 months):**
+
+* Cross-site skill generalization
+* Advanced CV/text matching for visual healing
+* Rate limiting, proxies, multi-tenant isolation
+* Policy & abuse controls
+
+---
+
+## 15. Recommended Technology Stack
+
+**Core runtime & executor**
+
+* **Playwright** (primary automation engine) — robust multi-browser support and modern API.
+* **Node.js + TypeScript** for command generation, orchestration, and executor glue code.
+
+**Model & AI**
+
+* **LLM host**: use a combination of hosted LLMs (OpenAI) for prototyping and a local high-performance model (Ollama, Mistral, or equivalent) for production to reduce cost and latency. Prefer models that support instruction tuning and fine-tuning.
+* **Prompting framework**: LangChain-like orchestration for chaining generation, scoring, and tool use.
+
+**Queue & workers**
+
+* **Redis** + **BullMQ** (Node) or **Celery** (Python) for job queues and retries.
+
+**Datastore**
+
+* **Postgres** for durable data (jobs, metadata).
+* **Redis** for fast selector/memory store and rate-limits.
+
+**Observability**
+
+* **Sentry** for error tracking
+* **Prometheus + Grafana** for metrics
+
+**Infrastructure**
+
+* **Docker** containers for executor isolation
+* **Kubernetes** for orchestration and autoscaling (optional at scale)
+
+**CI/CD**
+
+* GitHub Actions or equivalent
+
+**Optional/Advanced**
+
+* Proxy management service (residential / rotating) for high-risk sites
+* Browser fingerprinting mitigation library (for advanced use cases)
+
+---
+
+## 16. Cursor AI Integration Notes
+
+* Provide Cursor AI the canonical JSON mapping and sample recorder files (start with 50–200 diverse samples).
+* Define prompt templates for: intent extraction, selector healing, and plan generation. Include few-shot examples.
+* Provide a test harness where Cursor AI can send generated plans and receive executor feedback (success/fail) to enable RL-style improvements.
+
+---
+
+## 17. Deliverables for Cursor AI
+
+1. Intent extraction module (code + prompt set)
+2. Skill generation (LLM prompts + evaluation harness)
+3. Selector healing component with scoring heuristics
+4. Playwright command generator and executor contract
+5. Test suite with sample sites and metrics dashboard
+6. Integration guide and API spec for deployment
+
+---
+
+## 18. Appendix — Example Prompts (Short)
+
+**Intent extraction (few-shot):**
+
+* Input: sequence of recorder steps
+* Output: intent label + canonical steps
+
+**Selector healing (few-shot):**
+
+* Input: brittle selector + DOM snapshot
+* Output: ranked candidate selectors with scores
+
+---
+
+*End of specification.*

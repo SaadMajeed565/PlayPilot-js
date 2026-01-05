@@ -1,0 +1,39 @@
+{
+  "title": "Search Flow Example",
+  "url": "https://example.com/search",
+  "steps": [
+    {
+      "type": "navigate",
+      "url": "https://example.com/search",
+      "timestamp": 1000
+    },
+    {
+      "type": "input",
+      "selector": "input[name='q']",
+      "value": "web automation",
+      "timestamp": 2000
+    },
+    {
+      "type": "click",
+      "selector": "button[type='submit']",
+      "text": "Search",
+      "timestamp": 3000
+    },
+    {
+      "type": "waitForSelector",
+      "selector": ".search-results",
+      "timestamp": 4000
+    },
+    {
+      "type": "assert",
+      "selector": ".search-results",
+      "text": "Results",
+      "timestamp": 5000
+    }
+  ],
+  "metadata": {
+    "source": "chrome-recorder",
+    "version": "1.0"
+  }
+}
+
